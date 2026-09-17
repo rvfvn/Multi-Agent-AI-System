@@ -1,0 +1,141 @@
+# Local credentials and environment configuration
+.env
+.env.*
+*.env
+!.env.example
+!.env.sample
+!.env.template
+!*.env.example
+!*.env.sample
+!*.env.template
+.envrc
+/.secrets/
+/secrets/
+
+# Python virtual environments
+.venv/
+.venv-*/
+venv/
+venv-*/
+env/
+ENV/
+.virtualenv/
+__pypackages__/
+
+# Python bytecode and compiled extensions
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+
+# Python packaging and build output
+/build/
+/dist/
+*.egg-info/
+*.egg
+.eggs/
+*.whl
+.Python
+pip-wheel-metadata/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Test, coverage, type-checker, and linter caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+/coverage/
+/coverage.xml
+/junit.xml
+/nosetests.xml
+
+# Notebook and interactive Python state (keep notebooks themselves)
+.ipynb_checkpoints/
+.ipython/
+profile_default/
+ipython_config.py
+.python_history
+
+# Downloaded models and regenerable embedding/vector-store data.
+# Use these dedicated root directories; keep original knowledge-base documents.
+.cache/
+/.huggingface/
+/huggingface_cache/
+/model_cache/
+/embedding_cache/
+/embeddings_cache/
+/vector_store/
+/vectorstore/
+/vector_db/
+/faiss_index/
+/faiss_indexes/
+*.faiss
+
+# Playwright browser downloads, authentication state, and generated test output.
+# Keep authored screenshots/videos for the report/demo outside these directories.
+ms-playwright/
+.local-browsers/
+.playwright/
+playwright/.auth/
+playwright-report/
+playwright/.cache/
+blob-report/
+test-results/
+/storage_state.json
+/storage-state.json
+
+# Optional JavaScript tooling for the mock web application
+node_modules/
+.npm/
+.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime logs, local task state, and scratch files.
+# Do not ignore all JSON, pickle, database, or data files: they may be fixtures.
+*.log
+*.log.*
+*.pid
+*.pid.lock
+/logs/
+/run/
+/runtime/
+/tmp/
+/temp/
+.tmp/
+*.tmp
+*.temp
+
+# Editor-local files (shared VS Code settings/tasks remain trackable)
+.idea/
+.vscode/*.local.json
+*.code-workspace
+*.swp
+*.swo
+*~
+.history/
+.ropeproject/
+
+# macOS, Windows, and Linux desktop metadata
+.DS_Store
+._*
+.AppleDouble
+.LSOverride
+.Spotlight-V100/
+.Trashes/
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.directory
