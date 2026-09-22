@@ -13,6 +13,7 @@
 /secrets/
 
 # Python virtual environments
+/.conda/
 .venv/
 .venv-*/
 venv/
