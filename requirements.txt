@@ -1,11 +1,37 @@
-#these are just examples, you may not have to use all of them!
+# Python 3.11; install inside the project's Conda environment.
+# A2A HTTP service, task schemas, and synchronous/asynchronous clients
+fastapi==0.141.1
+uvicorn==0.53.0
+pydantic==2.13.5
+requests==2.34.2
+httpx==0.28.1
 
-langchain
-langchain-community
-langchain-text-splitters
-faiss-cpu
-sentence-transformers
-playwright
-python-dotenv
-requests
-groq
+# RAG orchestration, chunking, local embeddings, and FAISS vector search
+langchain==1.4.1
+langchain-core==1.6.3
+langchain-community==0.4.2
+langchain-text-splitters==1.1.2
+langchain-huggingface==1.2.2
+faiss-cpu==1.15.1
+sentence-transformers==6.0.1
+
+# Groq LLM access and LangChain integration
+groq==0.37.1
+langchain-groq==1.1.3
+
+# BM25 supports hybrid retrieval; sentence-transformers also supports reranking.
+rank-bm25==0.2.2
+
+# Optional PDF knowledge-base documents and local environment settings
+pypdf==6.19.0
+python-dotenv==1.2.3
+
+# Browser automation (Chromium is installed separately; see README.md)
+playwright==1.63.0
+
+# Unit, async, API, browser, and coverage testing; linting/formatting
+pytest==9.1.1
+pytest-asyncio==1.4.0
+pytest-playwright==0.9.0
+pytest-cov==7.1.0
+ruff==0.16.8
