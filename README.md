@@ -90,9 +90,5 @@ No usable result — the Specialist Agent completes but the result is missing a 
 
 In each case, the Requester Agent prints a clear message describing what happened and exits cleanly.
 
-Known Limitations
-The Specialist Agent's RAG pipeline is still in progress. process_task currently returns a hardcoded result (category: "Network") instead of retrieving from knowledge_base/ and calling the LLM. The Requester Agent already works against this contract and requires no changes once the real RAG pipeline is wired in, as long as result keeps the keys category, resolution, sources, and original_question.
-
-## Project Requirements
 
 See the project instructions on Canvas for the complete requirements.
