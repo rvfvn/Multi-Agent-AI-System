@@ -1,26 +1,16 @@
-import json 
-import os 
-
-from functools import lru_cache 
+import os
+from functools import lru_cache
 from pathlib import Path
 
 from dotenv import load_dotenv
-from groq import Groq 
+from groq import Groq
+from pydantic import ValidationError
 
-from specialist.models import SpecialistResult
+from specialist.models import LLMAnswer, SpecialistResult
 from specialist.rag import RAGSystem
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
-
-CATEGORIES = {
-    "account access": "Account Access",
-    "network": "Network",
-    "hardware": "Hardware",
-    "software": "Software",
-    "email": "Email",
-    "security": "Security",
-}
 
 @lru_cache(maxsize=1)
 def get_rag(): 
@@ -159,45 +149,34 @@ def answer_support_question(question : str) -> SpecialistResult:
     )
 
     
-    content = response.choices[0].message.content
-
-    if not content:
+    if not response.choices:
         raise ValueError("Groq returned an empty answer.")
+    content = response.choices[0].message.content
+    if content is None or (isinstance(content, str) and not content.strip()):
+        raise ValueError("Groq returned an empty answer.")
+    if not isinstance(content, str):
+        raise TypeError("Groq returned malformed answer content.")
 
-    data = json.loads(content)
+    try:
+        data = LLMAnswer.model_validate_json(content)
+    except ValidationError:
+        raise ValueError("Groq returned malformed answer JSON or field types.") from None
 
-    if data["supported"] is not True:
+    if not data.supported:
+        raise ValueError("No sufficiently relevant information was found.")
+
+    try:
+        result = SpecialistResult(
+            category=data.category,
+            resolution=data.resolution,
+            sources=data.sources,
+        )
+    except ValidationError:
         raise ValueError(
-            "No sufficiently relevant information was found."
-        )
+            "The LLM did not return a usable category, resolution, and source list."
+        ) from None
 
-    category = CATEGORIES.get(
-        data["category"].strip().lower()
-    )
+    if any(source not in selected_sources for source in result.sources):
+        raise ValueError("The LLM returned invalid or missing sources.")
 
-    resolution = data["resolution"].strip()
-    sources = data["sources"]
-
-    if not category or not resolution:
-        raise ValueError(
-            "The LLM did not return a usable "
-            "category and resolution."
-        )
-
-    if (
-        not sources
-        or any(
-            source not in selected_sources
-            for source in sources
-        )
-    ):
-        raise ValueError(
-            "The LLM returned invalid or missing sources."
-        )
-
-    return SpecialistResult(
-        category=category,
-        resolution=resolution,
-        sources=list(dict.fromkeys(sources)),
-    )
-
+    return result

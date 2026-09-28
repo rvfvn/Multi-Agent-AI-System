@@ -117,7 +117,8 @@ yarn-error.log*
 *.tmp
 *.temp
 
-# Editor-local files (shared VS Code settings/tasks remain trackable)
+# Editor-local files 
+.vscode
 .idea/
 .vscode/*.local.json
 *.code-workspace
