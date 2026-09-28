@@ -55,4 +55,6 @@ in your browser.
 
 ## Project Requirements
 
-See the project instructions on Canvas for the complete requirements.
+See [docs/CAPSTONE_REQUIREMENTS.md](docs/CAPSTONE_REQUIREMENTS.md) for the
+repository's structured reference to the complete Canvas assignment requirements.
+The Canvas assignment remains the authoritative source.
