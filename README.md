@@ -1,8 +1,49 @@
-# Group Project 1: 2 Agent AI System
+# Two-Agent IT Support System
+
+An IT support assistant that combines Agent-to-Agent communication, Retrieval-Augmented Generation (RAG), and Playwright browser automation.
+
+```text
+User question → Requester → Specialist → RAG + Groq
+             ← category, resolution, sources
+Requester → Playwright → support form → verified ticket
+```
+
+The Requester coordinates the workflow through HTTP task submission and polling. The Specialist retrieves support documentation and generates a grounded response. Playwright uses that response to fill the form and verifies the category, resolution, and five-digit ticket ID.
 
 ## Setup
 
-Run these commands from the repository root with Conda installed:
+Requires **Python 3.11**, Git, and a Groq API key for live answer generation. Run commands from the repository root.
+
+```sh
+git clone https://github.com/rvfvn/Multi-Agent-AI-System.git
+cd Multi-Agent-AI-System
+```
+
+Create and activate a virtual environment:
+
+```sh
+# macOS / Linux
+python3.11 -m venv .venv
+source .venv/bin/activate
+```
+
+```powershell
+# Windows PowerShell
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+Install dependencies and Chromium:
+
+```sh
+python -m pip install -r requirements.txt
+python -m pip check
+python -m playwright install chromium
+```
+
+On Linux, missing browser system libraries can be installed with `python -m playwright install --with-deps chromium`.
+
+Alternatively, use Conda instead of a venv:
 
 ```sh
 conda env create --prefix ./.conda --file environment.yml
@@ -10,87 +51,116 @@ conda activate ./.conda
 python -m playwright install chromium
 ```
 
-The environment uses Python 3.11 and installs the pinned direct dependencies in
-`requirements.txt` (transitive dependencies are resolved by pip). Its local
-`.conda/` directory is ignored by Git. To activate it again in a new terminal,
-run `conda activate ./.conda` from the repository root.
+Activate the chosen environment in each terminal. If an editor reports missing imports, select that environment's Python interpreter.
 
-After pulling dependency changes, activate the environment and run:
+## Configuration
 
-```sh
-python -m pip install -r requirements.txt
-python -m playwright install chromium
-python -m pip check
+Copy `.env.example` to `.env` if it does not already exist, then set:
+
+```dotenv
+GROQ_API_KEY=your_api_key_here
+GROQ_MODEL=openai/gpt-oss-20b
 ```
 
-Copy `.env.example` to `.env` and set your own `GROQ_API_KEY` there. Never commit
-the populated `.env` file.
+`GROQ_MODEL` is optional; the value above is the default. An alternative model must support the strict JSON-schema response format. Keep API keys private and restart the service after configuration changes.
 
-Dependencies cover the FastAPI/Uvicorn A2A service, HTTP clients, LangChain with
-Groq, local sentence-transformer embeddings, FAISS, BM25 hybrid retrieval,
-PDF loading, Playwright, and testing/linting. Sentence-transformers also supports
-[cross-encoder reranking](https://www.sbert.net/examples/sentence_transformer/applications/retrieve_rerank/README.html).
-These packages enable the workflow; the agents and
-advanced RAG technique still need to be implemented. Embedding/reranking models
-download when first loaded, and LLM calls require a valid API key.
-
-Browser installation is a separate step from installing the Python package; see
-the [Playwright setup documentation](https://playwright.dev/python/docs/library).
-
-To check the environment and run tests once they are added:
+Embedding and reranking models download on first use. To prepare them and inspect retrieval without Groq or browser automation:
 
 ```sh
-python -m pip check
-python -m pytest
-ruff check . --exclude .conda
+python -m scripts.demo_rag "I forgot my password and cannot log in."
 ```
 
-## Run the Mock Application
+## Run
 
-Open:
+**Terminal 1 — start the Specialist:**
 
-mock_support_app/index.html
+```sh
+python -m uvicorn specialist.server:app --host 127.0.0.1 --port 8000
+```
 
-in your browser.
+API documentation is available at [localhost:8000/docs](http://127.0.0.1:8000/docs). Use a single worker; Ctrl+C stops the service.
 
-Run the Requester Agent
+**Terminal 2 — run the Requester:**
 
-The Requester Agent coordinates the end-to-end workflow: it submits a question to the Specialist Agent over the A2A protocol, polls for the result, and uses Playwright to fill out and submit the support ticket form in the mock app.
+```sh
+python -m requester.agent "I forgot my password and cannot log into my account." --timeout 180 --show-browser
+```
 
-1. Start the Specialist Agent (Terminal 1)
-sh
-conda activate ./.conda
-uvicorn specialist.server:app --reload
+The Requester opens the local form, submits the ticket, verifies the result, and closes Chromium. Omit `--show-browser` for headless execution. Initial model loading can take longer than subsequent requests.
 
-Leave this running. It serves the A2A endpoints at http://127.0.0.1:8000.
+| Option | Default | Description |
+| --- | --- | --- |
+| `question` | Required | Nonblank support question, maximum 2,000 characters |
+| `--base-url` | `http://127.0.0.1:8000` | Specialist service address |
+| `--timeout` | `20.0` | Polling budget in seconds |
+| `--show-browser` | Off | Display Chromium |
 
-2. Run the Requester Agent (Terminal 2)
-sh
-conda activate ./.conda
-python -m requester.agent "My account has been locked, what should I do?"
+Handled success returns exit code `0`; handled failure returns `1`.
 
-Add --show-browser to watch Chromium fill and submit the form instead of running headless:
+**Frontend:** open `mock_support_app/index.html` directly to inspect the form manually. No frontend server is needed. Manual form entry does not invoke the agents.
 
-sh
-python -m requester.agent "My account has been locked, what should I do?" --show-browser
-CLI options
-Flag	Default	Description
-question	—	The user's support question (required, positional)
---base-url	http://127.0.0.1:8000	Specialist Agent's base URL
---timeout	20.0	Seconds to wait for the Specialist Agent before giving up
---show-browser	off	Run Chromium headed instead of headless
-Failure handling
+## Tests
 
-The Requester Agent handles the following failure cases without crashing, and without attempting the browser automation:
+The tests start any required local services automatically. Run from the repository root with the environment activated.
 
-Connection failure — the Specialist Agent isn't running or isn't reachable at --base-url. Reproduce by stopping uvicorn and re-running the Requester Agent.
-Timeout — the Specialist Agent doesn't reach completed/failed within --timeout seconds. Reproduce with a short timeout, e.g. --timeout 1, against the current Specialist stub (which sleeps 2s before completing).
-Specialist failure — the Specialist Agent returns status: "failed".
-No usable result — the Specialist Agent completes but the result is missing a category or resolution.
+**Offline tests — no API key, model downloads, or Chromium required:**
 
-In each case, the Requester Agent prints a clear message describing what happened and exits cleanly.
+```sh
+python -m pytest tests/ -q
+```
 
+Covers validation, polling, HTTP errors, retrieval with fake models, answer generation with mocked responses, and browser error handling. Local HTTP tests require permission to bind loopback ports. Browser and live tests are skipped by default.
 
-See [docs/CAPSTONE_REQUIREMENTS.md](docs/CAPSTONE_REQUIREMENTS.md) for the
-repository's structured reference to the complete Canvas assignment requirements.
-The Canvas assignment remains the authoritative source.
+**Browser tests — installed Chromium, no Groq:**
+
+```sh
+python -m pytest tests/browser/ --run-browser -q
+```
+
+**Live retrieval — real models, no Groq or browser:**
+
+```sh
+python -m pytest tests/live/test_rag_live.py --run-live -q
+```
+
+**Live end-to-end tests — Groq API key, real models, and Chromium:**
+
+```sh
+python -m pytest tests/live/ --run-live --run-browser --live-timeout 180 -q -s
+```
+
+Live tests may download models and consume API quota. Offline and browser tests alone do not verify live answer generation.
+
+## Failure and timeout examples
+
+For a repeatable timeout, start the test-only Specialist in one terminal:
+
+```sh
+python -m tests.fake_specialist --scenario timeout --port 8001
+```
+
+Then run the Requester in another:
+
+```sh
+python -m requester.agent "Test timeout handling" --base-url http://127.0.0.1:8001 --timeout 1
+```
+
+Expected: a timeout message, exit code `1`, and no browser launch.
+
+To simulate a failed task, stop the test service and restart it with `--scenario failed`, then rerun the Requester with `--timeout 5`. These scenarios use simulated responses, not RAG or Groq.
+
+## RAG and A2A design
+
+- Seven Markdown support documents are split into 500-character chunks with 100-character overlap.
+- `all-MiniLM-L6-v2` generates embeddings stored in a FAISS `IndexFlatL2` index.
+- The Specialist retrieves up to eight chunks and applies **cross-encoder reranking** with `cross-encoder/ms-marco-MiniLM-L-6-v2`. This advanced technique evaluates query/passage pairs to refine the initial retrieval order.
+- Up to three distinct full source documents are supplied to Groq. Structured output is validated, and cited sources must belong to that context. Unsupported answers become failed tasks.
+- `POST /tasks` returns a unique task ID and immediate acknowledgment. `GET /tasks/{task_id}` returns `submitted`, `working`, `completed`, or `failed`, with the result or error when available.
+
+## Limitations
+
+- The unchanged form supports **Account Access, Network, Hardware, and Software**. Email and Security remain valid Specialist classifications but are rejected before browser launch. `test_cases.json` describes classification expectations, including Email.
+- Tasks and the vector index are held in memory. Restarting loses tasks; restart after changing knowledge-base documents.
+- Polling timeout excludes submission and browser work and does not cancel Specialist processing. HTTP timeouts limit connection/read waiting rather than guaranteeing a strict total duration.
+- The frontend is a client-side simulation without persistent ticket storage.
+- Live results depend on model relevance and Groq availability; valid source references do not guarantee every generated instruction is correct.

@@ -79,7 +79,9 @@ def submit_ticket(
                 page.wait_for_selector("#confirmation:not(.hidden)", state="visible")
                 ticket_id = page.locator("#ticket-id").inner_text()
                 shown_category = page.locator("#ticket-category").inner_text()
-                shown_resolution = page.locator("#ticket-resolution").inner_text()
+                # The form sets textContent; inner_text collapses line breaks in
+                # this span and would reject valid multiline resolution notes.
+                shown_resolution = page.locator("#ticket-resolution").text_content()
 
                 if shown_category != expected_category:
                     raise ValueError("Confirmed category does not match the submitted category.")

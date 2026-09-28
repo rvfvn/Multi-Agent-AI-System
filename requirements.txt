@@ -1,4 +1,4 @@
-# Python 3.11; install inside the project's Conda environment.
+# Python 3.11; install inside the project's venv or Conda environment.
 # A2A HTTP service, task schemas, and synchronous/asynchronous clients
 fastapi==0.141.1
 uvicorn==0.53.0
