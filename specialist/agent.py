@@ -1,52 +1,71 @@
-import time
-import uuid 
+import logging
+import uuid
+
+from threading import Lock
+
+from specialist.answer import answer_support_question
+
+
+logger = logging.getLogger(__name__)
 
 tasks = {}
 
+task_lock = Lock()
+
+
 def create_task(question: str) -> dict:
+    """Create and store a new task."""
+
     task_id = str(uuid.uuid4())
 
-    tasks[task_id] = {
+    task = {
         "task_id": task_id,
         "status": "submitted",
         "question": question,
         "result": None,
         "error": None,
-
     }
 
-    return tasks[task_id]
+    with task_lock:
+        tasks[task_id] = task
+        return task.copy()
+
 
 def get_task(task_id: str):
-    return tasks.get(task_id)
+    """Retrieve the current task state."""
+
+    with task_lock:
+        task = tasks.get(task_id)
+        return task.copy() if task else None
+
 
 def process_task(task_id: str):
+    """
+    Execute a Specialist task using RAG and Groq.
+    FastAPI runs this as a background task.
+    """
+
     try:
-        tasks[task_id]["status"] = "working"
+        with task_lock:
+            tasks[task_id]["status"] = "working"
+            question = tasks[task_id]["question"]
 
-        time.sleep(2) # for testing so it does not change immediately
+        result = answer_support_question(question) # bangggg
 
-        question = tasks[task_id]["question"]
-
-        # temp fake specialist result - will be replaced by a real RAG call
-
-        result = {
-            "category": "Network",
-            "resolution": (
-                "Reconnect the device to the network and verify "
-                "that the user can access the required resources."
-                
-            ),
-            "sources": ["network.md"],
-            "original_question": question, 
-        }
-
-        tasks[task_id]["result"] = result
-        tasks[task_id]["status"] = "completed"
+        with task_lock:
+            tasks[task_id]["result"] = result.model_dump()
+            tasks[task_id]["status"] = "completed"
 
     except Exception as exc:
-        tasks[task_id]["status"] = "failed"
-        tasks[task_id]["error"] = str(exc)
+        logger.exception(
+            "Specialist task %s failed",
+            task_id,
+        )
+
+        with task_lock:
+            tasks[task_id]["result"] = None
+            tasks[task_id]["error"] = str(exc)
+            tasks[task_id]["status"] = "failed"
 
 
 
