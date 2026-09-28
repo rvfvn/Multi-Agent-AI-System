@@ -1,87 +1,112 @@
-"""Playwright automation for mock_support_app/index.html.
-
-Takes the category/resolution produced by the Specialist Agent and uses
-them to actually fill out and submit the support ticket form, then
-verifies the confirmation panel appeared.
-"""
+"""Submit Specialist-provided values to the unchanged support form and verify them."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
-from typing import Optional
 
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
-# The <select> uses lowercase, underscored values; the Specialist Agent
-# returns human-readable labels like "Network" or "Account Access".
 CATEGORY_VALUE_MAP = {
     "account access": "account_access",
     "hardware": "hardware",
     "software": "software",
     "network": "network",
 }
+LAUNCH_TIMEOUT_MS = 15000
+NAVIGATION_TIMEOUT_MS = 10000
+INTERACTION_TIMEOUT_MS = 5000
 
 
 def normalize_category(category: str) -> str:
-    """Map a free-text category from the Specialist to a valid <select> value."""
+    """Map only supported category labels to the form's select values."""
+    if not isinstance(category, str) or not category.strip():
+        raise ValueError("Category must be a nonblank string.")
     key = category.strip().lower()
-    return CATEGORY_VALUE_MAP.get(key, key.replace(" ", "_"))
+    if key not in CATEGORY_VALUE_MAP:
+        raise ValueError(f"Support form does not support category: {category!r}.")
+    return CATEGORY_VALUE_MAP[key]
 
 
 def submit_ticket(
     issue: str,
     category: str,
     resolution: str,
-    app_path: Optional[str] = None,
+    app_path: str | None = None,
     headless: bool = True,
 ) -> dict:
-    """Open the mock support app, fill the form with info from the
-    Specialist Agent's result, submit it, and verify the confirmation.
+    """Return a verified ticket or a controlled failure; timeouts are per operation."""
+    for name, value in (("Issue", issue), ("Category", category), ("Resolution", resolution)):
+        if not isinstance(value, str) or not value.strip():
+            return {"success": False, "error": f"{name} must be a nonblank string."}
 
-    Returns e.g.:
-        {"success": True, "ticket_id": "48213", "category": "Network",
-         "resolution": "..."}
-        {"success": False, "error": "..."}
-    """
-    if app_path is None:
-        app_path = str(
-            Path(__file__).resolve().parent.parent
-            / "mock_support_app"
-            / "index.html"
-        )
+    issue = issue.strip()
+    category = category.strip()
+    resolution = resolution.strip()
+    operation = "input validation"
+    outcome = {"success": False, "error": "Browser workflow did not complete."}
 
-    file_url = Path(app_path).resolve().as_uri()
-    category_value = normalize_category(category)
+    try:
+        category_value = normalize_category(category)
+        expected_category = category.lower().title()
+        path = (
+            Path(app_path) if app_path is not None
+            else Path(__file__).resolve().parent.parent / "mock_support_app" / "index.html"
+        ).resolve()
+        if not path.is_file():
+            raise ValueError(f"Support application file does not exist: {path}")
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=headless)
-        page = browser.new_page()
-        page.goto(file_url)
+        operation = "Playwright startup"
+        with sync_playwright() as p:
+            browser = None
+            try:
+                operation = "browser launch"
+                browser = p.chromium.launch(headless=headless, timeout=LAUNCH_TIMEOUT_MS)
+                page = browser.new_page()
+                page.set_default_timeout(INTERACTION_TIMEOUT_MS)
+                page.set_default_navigation_timeout(NAVIGATION_TIMEOUT_MS)
 
-        page.fill("#issue", issue)
-        page.select_option("#category", category_value)
-        page.fill("#resolution", resolution)
-        page.click("#submit-ticket")
+                operation = "navigation"
+                page.goto(path.as_uri())
 
-        try:
-            page.wait_for_selector("#confirmation:not(.hidden)", timeout=5000)
-        except Exception:
-            error_locator = page.locator("#error")
-            error_text = error_locator.inner_text() if error_locator.is_visible() else None
-            browser.close()
-            return {
-                "success": False,
-                "error": error_text or "Confirmation panel did not appear",
-            }
+                operation = "form interaction"
+                page.fill("#issue", issue)
+                page.select_option("#category", category_value)
+                page.fill("#resolution", resolution)
+                page.click("#submit-ticket")
 
-        ticket_id = page.locator("#ticket-id").inner_text()
-        shown_category = page.locator("#ticket-category").inner_text()
-        shown_resolution = page.locator("#ticket-resolution").inner_text()
+                operation = "confirmation verification"
+                page.wait_for_selector("#confirmation:not(.hidden)", state="visible")
+                ticket_id = page.locator("#ticket-id").inner_text()
+                shown_category = page.locator("#ticket-category").inner_text()
+                shown_resolution = page.locator("#ticket-resolution").inner_text()
 
-        browser.close()
+                if shown_category != expected_category:
+                    raise ValueError("Confirmed category does not match the submitted category.")
+                if shown_resolution != resolution:
+                    raise ValueError("Confirmed resolution does not match the submitted resolution.")
+                if re.fullmatch(r"[0-9]{5}", ticket_id) is None:
+                    raise ValueError("Confirmed ticket ID must contain exactly five digits.")
 
-        return {
-            "success": True,
-            "ticket_id": ticket_id,
-            "category": shown_category,
-            "resolution": shown_resolution,
-        }
+                outcome = {
+                    "success": True,
+                    "ticket_id": ticket_id,
+                    "category": shown_category,
+                    "resolution": shown_resolution,
+                }
+            except (PlaywrightError, OSError, ValueError) as exc:
+                outcome = {"success": False, "error": f"{operation} failed: {exc}"}
+            finally:
+                if browser is not None:
+                    try:
+                        browser.close()
+                    except (PlaywrightError, OSError) as exc:
+                        if outcome["success"]:
+                            outcome = {"success": False, "error": f"Browser cleanup failed: {exc}"}
+            operation = "Playwright cleanup"
+    except (PlaywrightError, OSError, ValueError) as exc:
+        # Preserve an earlier failure if stopping Playwright also fails.
+        if outcome["success"] or outcome["error"] == "Browser workflow did not complete.":
+            outcome = {"success": False, "error": f"{operation} failed: {exc}"}
+
+    return outcome
