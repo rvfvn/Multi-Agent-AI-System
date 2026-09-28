@@ -26,7 +26,11 @@ from requester.a2a_client import (
     TaskFailedError,
     TaskTimeoutError,
 )
-from requester.browser_flow import CATEGORY_VALUE_MAP, submit_ticket
+from requester.browser_flow import (
+    CATEGORY_VALUE_MAP,
+    submit_ticket,
+    validate_browser_options,
+)
 
 
 def _failure(stage: str, message: str) -> dict:
@@ -39,6 +43,8 @@ def handle_request(
     base_url: str = "http://127.0.0.1:8000",
     timeout: float = 20.0,
     headless: bool = True,
+    slow_mo: float = 0,
+    keep_open: bool = False,
 ) -> dict:
     """Runs the full Requester Agent workflow for one user question.
 
@@ -59,6 +65,11 @@ def handle_request(
         or timeout <= 0
     ):
         return _failure("input", "Polling timeout must be a finite number greater than 0.")
+
+    try:
+        validate_browser_options(headless, slow_mo, keep_open)
+    except ValueError as exc:
+        return _failure("input", str(exc))
 
     question = question.strip()
     client = SpecialistClient(base_url=base_url)
@@ -109,7 +120,10 @@ def handle_request(
     print("[Requester] Filling out support ticket form via Playwright...")
 
     try:
-        outcome = submit_ticket(issue=question, category=category, resolution=resolution, headless=headless,)
+        outcome = submit_ticket(
+            issue=question, category=category, resolution=resolution,
+            headless=headless, slow_mo=slow_mo, keep_open=keep_open,
+        )
     except PlaywrightError as exc:
         return _failure("browser", f"Playwright could not submit the ticket: {exc}")
 
@@ -144,6 +158,14 @@ def main() -> int:
         action="store_true",
         help="Run the browser headed (visible) instead of headless",
     )
+    parser.add_argument(
+        "--slow-mo", type=float, default=0,
+        help="Delay browser actions by this many milliseconds (requires --show-browser)",
+    )
+    parser.add_argument(
+        "--keep-open", action="store_true",
+        help="Wait for Enter after ticket verification (requires --show-browser)",
+    )
     args = parser.parse_args()
 
     outcome = handle_request(
@@ -151,6 +173,8 @@ def main() -> int:
         base_url=args.base_url,
         timeout=args.timeout,
         headless=not args.show_browser,
+        slow_mo=args.slow_mo,
+        keep_open=args.keep_open,
     )
 
     return 0 if outcome["success"] else 1

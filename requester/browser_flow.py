@@ -1,6 +1,7 @@
 """Submit Specialist-provided values to the unchanged support form and verify them."""
 from __future__ import annotations
 
+import math
 import re
 from pathlib import Path
 
@@ -16,6 +17,19 @@ CATEGORY_VALUE_MAP = {
 LAUNCH_TIMEOUT_MS = 15000
 NAVIGATION_TIMEOUT_MS = 10000
 INTERACTION_TIMEOUT_MS = 5000
+
+
+def validate_browser_options(headless: bool, slow_mo: float, keep_open: bool) -> None:
+    """Reject invalid display options before submitting a task or opening a browser."""
+    if (
+        isinstance(slow_mo, bool)
+        or not isinstance(slow_mo, (int, float))
+        or not math.isfinite(slow_mo)
+        or slow_mo < 0
+    ):
+        raise ValueError("Browser slow motion must be a finite, nonnegative number of milliseconds.")
+    if headless and (slow_mo > 0 or keep_open):
+        raise ValueError("Slow motion and keep-open options require --show-browser.")
 
 
 def normalize_category(category: str) -> str:
@@ -34,6 +48,8 @@ def submit_ticket(
     resolution: str,
     app_path: str | None = None,
     headless: bool = True,
+    slow_mo: float = 0,
+    keep_open: bool = False,
 ) -> dict:
     """Return a verified ticket or a controlled failure; timeouts are per operation."""
     for name, value in (("Issue", issue), ("Category", category), ("Resolution", resolution)):
@@ -47,6 +63,7 @@ def submit_ticket(
     outcome = {"success": False, "error": "Browser workflow did not complete."}
 
     try:
+        validate_browser_options(headless, slow_mo, keep_open)
         category_value = normalize_category(category)
         expected_category = category.lower().title()
         path = (
@@ -61,7 +78,9 @@ def submit_ticket(
             browser = None
             try:
                 operation = "browser launch"
-                browser = p.chromium.launch(headless=headless, timeout=LAUNCH_TIMEOUT_MS)
+                browser = p.chromium.launch(
+                    headless=headless, timeout=LAUNCH_TIMEOUT_MS, slow_mo=slow_mo
+                )
                 page = browser.new_page()
                 page.set_default_timeout(INTERACTION_TIMEOUT_MS)
                 page.set_default_navigation_timeout(NAVIGATION_TIMEOUT_MS)
@@ -96,6 +115,14 @@ def submit_ticket(
                     "category": shown_category,
                     "resolution": shown_resolution,
                 }
+                if keep_open:
+                    print(f"[Browser] Ticket {ticket_id} verified. Category: {shown_category}")
+                    try:
+                        input("[Browser] Confirmation is open. Press Enter in this terminal to close it... ")
+                    except (EOFError, OSError, KeyboardInterrupt):
+                        # Verification already succeeded; unavailable input or
+                        # an interrupted pause must still release the browser.
+                        print("\n[Browser] Closing the verified ticket window.")
             except (PlaywrightError, OSError, ValueError) as exc:
                 outcome = {"success": False, "error": f"{operation} failed: {exc}"}
             finally:

@@ -88,12 +88,22 @@ python -m requester.agent "I forgot my password and cannot log into my account."
 
 The Requester opens the local form, submits the ticket, verifies the result, and closes Chromium. Omit `--show-browser` for headless execution. Initial model loading can take longer than subsequent requests.
 
+To watch the form being filled and inspect the verified confirmation:
+
+```sh
+python -m requester.agent "I forgot my password and cannot log into my account." --timeout 180 --show-browser --slow-mo 500 --keep-open
+```
+
+This slows browser actions by 500 milliseconds and keeps the confirmation open after verification. Press **Enter in the Requester terminal** to close it. Both display controls require `--show-browser`; they are off by default and do not change the form or generated answer. The polling timeout does not include this optional pause.
+
 | Option | Default | Description |
 | --- | --- | --- |
 | `question` | Required | Nonblank support question, maximum 2,000 characters |
 | `--base-url` | `http://127.0.0.1:8000` | Specialist service address |
 | `--timeout` | `20.0` | Polling budget in seconds |
 | `--show-browser` | Off | Display Chromium |
+| `--slow-mo` | `0` | Delay browser actions in milliseconds; requires `--show-browser` |
+| `--keep-open` | Off | Wait for Enter after successful verification; requires `--show-browser` |
 
 Handled success returns exit code `0`; handled failure returns `1`.
 

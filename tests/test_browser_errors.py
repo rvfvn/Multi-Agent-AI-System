@@ -104,3 +104,62 @@ def test_mismatched_confirmation_is_not_success(selector, value, simulated_brows
     values[selector] = value
     assert browser_flow.submit_ticket("issue", "Network", "notes")["success"] is False
     browser.close.assert_called_once()
+
+
+def test_default_execution_never_prompts(simulated_browser, monkeypatch):
+    prompt = Mock()
+    monkeypatch.setattr("builtins.input", prompt)
+    assert browser_flow.submit_ticket("issue", "Network", "notes")["success"]
+    prompt.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "interruption", [None, EOFError(), KeyboardInterrupt(), OSError("no input")]
+)
+def test_pause_after_verification_still_closes_browser(
+    interruption, simulated_browser, monkeypatch
+):
+    _, p, browser, _, _ = simulated_browser
+
+    def pause(message):
+        assert "Press Enter" in message
+        browser.close.assert_not_called()
+        if interruption is not None:
+            raise interruption
+        return ""
+
+    prompt = Mock(side_effect=pause)
+    monkeypatch.setattr("builtins.input", prompt)
+    result = browser_flow.submit_ticket(
+        "issue", "Network", "notes", headless=False, slow_mo=500, keep_open=True
+    )
+    assert result["success"]
+    prompt.assert_called_once()
+    p.chromium.launch.assert_called_once_with(
+        headless=False, timeout=browser_flow.LAUNCH_TIMEOUT_MS, slow_mo=500
+    )
+    browser.close.assert_called_once()
+
+
+def test_verification_failure_does_not_pause(simulated_browser, monkeypatch):
+    _, _, browser, _, values = simulated_browser
+    values["#ticket-id"] = "bad"
+    prompt = Mock()
+    monkeypatch.setattr("builtins.input", prompt)
+    assert not browser_flow.submit_ticket(
+        "issue", "Network", "notes", headless=False, keep_open=True
+    )["success"]
+    prompt.assert_not_called()
+    browser.close.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "options", [{"slow_mo": -1}, {"slow_mo": 500}, {"keep_open": True}]
+)
+def test_direct_invalid_display_options_do_not_launch(options, monkeypatch):
+    start = Mock()
+    monkeypatch.setattr(browser_flow, "sync_playwright", start)
+    assert not browser_flow.submit_ticket("issue", "Network", "notes", **options)[
+        "success"
+    ]
+    start.assert_not_called()

@@ -26,6 +26,8 @@ def test_real_http_success_passes_result_to_browser(server_factory, monkeypatch)
         category="Network",
         resolution="Simulated resolution: reconnect the device.",
         headless=True,
+        slow_mo=0,
+        keep_open=False,
     )
 
 

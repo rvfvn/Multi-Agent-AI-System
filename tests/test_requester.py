@@ -56,6 +56,8 @@ def test_success_passes_exact_values(workflow):
         category="Network",
         resolution="Reconnect the device.",
         headless=False,
+        slow_mo=0,
+        keep_open=False,
     )
 
 
@@ -145,3 +147,46 @@ def test_cli_invalid_input_returns_nonzero():
     assert process.returncode == 1
     assert "nonblank" in process.stdout
     assert "Traceback" not in process.stderr
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"slow_mo": -1},
+        {"slow_mo": float("nan")},
+        {"slow_mo": float("inf")},
+        {"slow_mo": True},
+        {"slow_mo": 500},
+        {"keep_open": True},
+    ],
+)
+def test_invalid_display_options_never_submit(options, workflow):
+    factory, _, browser = workflow
+    result = agent.handle_request("question", **options)
+    assert result["stage"] == "input"
+    factory.assert_not_called()
+    browser.assert_not_called()
+
+
+def test_visible_options_reach_browser(workflow):
+    _, _, browser = workflow
+    assert agent.handle_request(
+        "question", headless=False, slow_mo=500, keep_open=True
+    )["success"]
+    assert browser.call_args.kwargs["slow_mo"] == 500
+    assert browser.call_args.kwargs["keep_open"] is True
+    assert browser.call_args.kwargs["headless"] is False
+
+
+def test_cli_passes_visible_options(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["requester", "question", "--show-browser", "--slow-mo", "500", "--keep-open"],
+    )
+    handle = Mock(return_value={"success": True})
+    monkeypatch.setattr(agent, "handle_request", handle)
+    assert agent.main() == 0
+    assert handle.call_args.kwargs["headless"] is False
+    assert handle.call_args.kwargs["slow_mo"] == 500
+    assert handle.call_args.kwargs["keep_open"] is True
