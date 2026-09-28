@@ -53,7 +53,43 @@ mock_support_app/index.html
 
 in your browser.
 
-## Project Requirements
+Run the Requester Agent
+
+The Requester Agent coordinates the end-to-end workflow: it submits a question to the Specialist Agent over the A2A protocol, polls for the result, and uses Playwright to fill out and submit the support ticket form in the mock app.
+
+1. Start the Specialist Agent (Terminal 1)
+sh
+conda activate ./.conda
+uvicorn specialist.server:app --reload
+
+Leave this running. It serves the A2A endpoints at http://127.0.0.1:8000.
+
+2. Run the Requester Agent (Terminal 2)
+sh
+conda activate ./.conda
+python -m requester.agent "My account has been locked, what should I do?"
+
+Add --show-browser to watch Chromium fill and submit the form instead of running headless:
+
+sh
+python -m requester.agent "My account has been locked, what should I do?" --show-browser
+CLI options
+Flag	Default	Description
+question	—	The user's support question (required, positional)
+--base-url	http://127.0.0.1:8000	Specialist Agent's base URL
+--timeout	20.0	Seconds to wait for the Specialist Agent before giving up
+--show-browser	off	Run Chromium headed instead of headless
+Failure handling
+
+The Requester Agent handles the following failure cases without crashing, and without attempting the browser automation:
+
+Connection failure — the Specialist Agent isn't running or isn't reachable at --base-url. Reproduce by stopping uvicorn and re-running the Requester Agent.
+Timeout — the Specialist Agent doesn't reach completed/failed within --timeout seconds. Reproduce with a short timeout, e.g. --timeout 1, against the current Specialist stub (which sleeps 2s before completing).
+Specialist failure — the Specialist Agent returns status: "failed".
+No usable result — the Specialist Agent completes but the result is missing a category or resolution.
+
+In each case, the Requester Agent prints a clear message describing what happened and exits cleanly.
+
 
 See [docs/CAPSTONE_REQUIREMENTS.md](docs/CAPSTONE_REQUIREMENTS.md) for the
 repository's structured reference to the complete Canvas assignment requirements.
